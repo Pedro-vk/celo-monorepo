@@ -32,26 +32,43 @@ import { currentAccountSelector } from 'src/web3/selectors'
 
 const TAG = 'send/saga'
 
-export async function getSendTxGas(
+export async function* getSendTxGas(
   account: string,
   contractGetter: typeof getStableTokenContract | typeof getGoldTokenContract,
   params: BasicTokenTransfer
 ) {
+  console.log(22222222, 0)
+  console.log(22222222, 0)
   Logger.debug(`${TAG}/getSendTxGas`, 'Getting gas estimate for send tx')
   const tx = await createTransaction(contractGetter, params)
+  console.log(22222222, 1)
   const tokenContract = await contractGetter(web3)
   const txParams = { from: account, gasCurrency: tokenContract._address }
-  const gas = new BigNumber(await tx.estimateGas(txParams))
+  let gas
+  try {
+    gas = new BigNumber(await tx.estimateGas(txParams))
+  } catch (e) {
+    console.log(22222222, 2)
+    const stableToken = +(yield select((state) => state.stableToken.balance))
+    const goldToken = +(yield select((state) => state.goldToken.balance))
+    console.log(1111111111, stableToken, goldToken)
+    console.log(22222222, 3)
+    if (stableToken + goldToken === 0) {
+      gas = new BigNumber(0)
+    } else {
+      throw e
+    }
+  }
   Logger.debug(`${TAG}/getSendTxGas`, `Estimated gas of ${gas.toString()}}`)
   return gas
 }
 
-export async function getSendFee(
+export async function* getSendFee(
   account: string,
   contractGetter: typeof getStableTokenContract | typeof getGoldTokenContract,
   params: BasicTokenTransfer
 ) {
-  const gas = await getSendTxGas(account, contractGetter, params)
+  const gas = yield getSendTxGas(account, contractGetter, params)
   return calculateFee(gas)
 }
 

@@ -48,11 +48,15 @@ export function* estimateFeeSaga({ feeType }: EstimateFeeAction) {
         feeInWei = feeInWei!.plus(getInvitationVerificationFeeInWei())
         break
       case FeeType.SEND:
+        console.log(111, 3)
+        console.log(111, [getSendTxGas, account, getStableTokenContract, placeholderSendTx])
+        console.log(111, 3)
         feeInWei = yield call(
           getOrSetFee,
           FeeType.SEND,
           call(getSendTxGas, account, getStableTokenContract, placeholderSendTx)
         )
+        console.log(111, 4, feeInWei)
         break
       case FeeType.EXCHANGE:
         // TODO
@@ -71,16 +75,24 @@ export function* estimateFeeSaga({ feeType }: EstimateFeeAction) {
       yield put(feeEstimated(feeType, feeInWei.toString()))
     }
   } catch (error) {
+    console.log(error)
     Logger.error(`${TAG}/estimateFeeSaga`, 'Error estimating fee', error)
     yield put(showError(ErrorMessages.CALCULATE_FEE_FAILED))
   }
 }
 
 function* getOrSetFee(feeType: FeeType, gasGetter: CallEffect) {
+  console.log(111111, 0, 0, '-----------------')
+  console.log(feeGasCache.get(feeType))
+  console.log(111111, 0, 1, '-----------------')
   if (!feeGasCache.get(feeType)) {
     const gas: BigNumber = yield gasGetter
     feeGasCache.set(feeType, gas)
   }
+  console.log(111111, 1, '-----------------')
+  console.log(calculateFee)
+  console.log(feeGasCache.get(feeType))
+  console.log(111111, 2, '-----------------')
   const feeInWei: BigNumber = yield call(calculateFee, feeGasCache.get(feeType)!)
   return feeInWei
 }
