@@ -2,6 +2,7 @@ import BigNumber from 'bignumber.js'
 import { assert } from 'chai'
 import { spawn, SpawnOptions } from 'child_process'
 import fs from 'fs'
+import _ from 'lodash'
 import { join as joinPath, resolve as resolvePath } from 'path'
 import { Admin } from 'web3-eth-admin'
 import {
@@ -44,12 +45,19 @@ export interface GethTestConfig {
   instances: GethInstanceConfig[]
   useBootnode?: boolean
   genesisConfig?: any
+  migrationOverrides?: any
 }
 
 const TEST_DIR = '/tmp/e2e'
 const GENESIS_PATH = `${TEST_DIR}/genesis.json`
 const NetworkId = 1101
 const MonorepoRoot = resolvePath(joinPath(__dirname, '../..', '../..'))
+
+export async function waitToFinishSyncing(web3: any) {
+  while ((await web3.eth.isSyncing()) || (await web3.eth.getBlockNumber()) === 0) {
+    await sleep(0.1)
+  }
+}
 
 export function assertAlmostEqual(
   actual: BigNumber,
@@ -206,6 +214,7 @@ export function writeGenesis(validators: Validator[], path: string, configOverri
     validators,
     blockTime: 0,
     epoch: 10,
+    lookback: 2,
     requestTimeout: 3000,
     chainId: NetworkId,
     ...configOverrides,
@@ -407,23 +416,33 @@ export async function startGeth(gethBinaryPath: string, instance: GethInstanceCo
 
 export async function migrateContracts(
   validatorPrivateKeys: string[],
+  attestationKeys: string[],
   validators: string[],
-  to: number = 1000
+  to: number = 1000,
+  overrides: any = {}
 ) {
-  const migrationOverrides = {
-    validators: {
-      validatorKeys: validatorPrivateKeys.map(ensure0x),
-    },
-    election: {
-      minElectableValidators: '1',
-    },
-    stableToken: {
-      initialBalances: {
-        addresses: validators.map(ensure0x),
-        values: validators.map(() => '10000000000000000000000'),
+  const migrationOverrides = _.merge(
+    {
+      election: {
+        minElectableValidators: '1',
+      },
+      reserve: {
+        goldBalance: 100000,
+      },
+      stableToken: {
+        initialBalances: {
+          addresses: validators.map(ensure0x),
+          values: validators.map(() => '10000000000000000000000'),
+        },
+      },
+      validators: {
+        validatorKeys: validatorPrivateKeys.map(ensure0x),
+        attestationKeys: attestationKeys.map(ensure0x),
       },
     },
-  }
+    overrides
+  )
+
   const args = [
     '--cwd',
     `${MonorepoRoot}/packages/protocol`,
@@ -505,6 +524,7 @@ export function getContext(gethConfig: GethTestConfig) {
   const validatorInstances = gethConfig.instances.filter((x: any) => x.validating)
   const numValidators = validatorInstances.length
   const validatorPrivateKeys = getPrivateKeysFor(AccountType.VALIDATOR, mnemonic, numValidators)
+  const attestationKeys = getPrivateKeysFor(AccountType.ATTESTATION, mnemonic, numValidators)
   const validators = getValidators(mnemonic, numValidators)
 
   const proxyInstances = gethConfig.instances.filter((x: any) => x.isProxy)
@@ -557,6 +577,11 @@ export function getContext(gethConfig: GethTestConfig) {
 
       // Set the private key for the validator or proxy instance
       if (instance.validating) {
+        // Automatically connect validator nodes to eachother.
+        const otherValidators = validatorEnodes.filter(
+          (__: string, i: number) => i !== validatorIndex
+        )
+        instance.peers = (instance.peers || []).concat(otherValidators)
         instance.privateKey = instance.privateKey || validatorPrivateKeys[validatorIndex]
         validatorIndex++
       } else if (instance.isProxy) {
@@ -591,8 +616,10 @@ export function getContext(gethConfig: GethTestConfig) {
     if (gethConfig.migrate || gethConfig.migrateTo) {
       await migrateContracts(
         validatorPrivateKeys,
+        attestationKeys,
         validators.map((x) => x.address),
-        gethConfig.migrateTo
+        gethConfig.migrateTo,
+        gethConfig.migrationOverrides
       )
     }
     await killGeth()
@@ -611,16 +638,22 @@ export function getContext(gethConfig: GethTestConfig) {
       await startBootnode(bootnodeBinaryPath, mnemonic)
     }
     let validatorIndex = 0
+    const validatorIndices: number[] = []
     for (const instance of gethConfig.instances) {
-      await restoreDatadir(instance)
-      if (!instance.privateKey && instance.validating) {
-        instance.privateKey = validatorPrivateKeys[validatorIndex]
-      }
-      await startGeth(gethBinaryPath, instance)
+      validatorIndices.push(validatorIndex)
       if (instance.validating) {
         validatorIndex++
       }
     }
+    await Promise.all(
+      gethConfig.instances.map(async (instance, i) => {
+        await restoreDatadir(instance)
+        if (!instance.privateKey && instance.validating) {
+          instance.privateKey = validatorPrivateKeys[validatorIndices[i]]
+        }
+        return startGeth(gethBinaryPath, instance)
+      })
+    )
   }
 
   const after = () => killGeth()
