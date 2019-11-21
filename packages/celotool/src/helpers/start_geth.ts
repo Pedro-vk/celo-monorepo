@@ -79,6 +79,7 @@ async function main({
   const validatorsFilePath = `${tmpDir}/validators.json`
   const validatorInstances = gethConfig.instances.filter((x: any) => x.validating)
   const validatorPrivateKeys = getPrivateKeysFor(AccountType.VALIDATOR, mnemonic, numValidators)
+  const attestationKeys = getPrivateKeysFor(AccountType.ATTESTATION, mnemonic, numValidators)
   const validators = getValidators(mnemonic, numValidators)
   const validatorEnodes = validatorPrivateKeys.map((x: any, i: number) =>
     getEnodeAddress(privateKeyToPublicKey(x), '127.0.0.1', validatorInstances[i].port)
@@ -120,6 +121,7 @@ async function main({
   if (gethConfig.migrate || gethConfig.migrateTo) {
     await migrateContracts(
       validatorPrivateKeys,
+      attestationKeys,
       validators.map((v) => v.address),
       gethConfig.migrateTo
     )

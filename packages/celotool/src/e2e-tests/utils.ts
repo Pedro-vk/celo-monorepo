@@ -577,11 +577,6 @@ export function getContext(gethConfig: GethTestConfig) {
 
       // Set the private key for the validator or proxy instance
       if (instance.validating) {
-        // Automatically connect validator nodes to eachother.
-        const otherValidators = validatorEnodes.filter(
-          (__: string, i: number) => i !== validatorIndex
-        )
-        instance.peers = (instance.peers || []).concat(otherValidators)
         instance.privateKey = instance.privateKey || validatorPrivateKeys[validatorIndex]
         validatorIndex++
       } else if (instance.isProxy) {
