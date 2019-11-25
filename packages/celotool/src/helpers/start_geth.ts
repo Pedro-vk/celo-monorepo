@@ -65,7 +65,7 @@ async function main({
     migrateTo,
     instances: [...Array(numValidators).keys()].map((key: number) => {
       return {
-        name: `validator-${key}`,
+        name: `${key}-validator`,
         validating: true,
         syncmode: 'full',
         port: 30303 + key,
