@@ -8,6 +8,7 @@ import { showError } from 'src/alert/actions'
 import { ErrorMessages } from 'src/app/ErrorMessages'
 import { CURRENCY_ENUM } from 'src/geth/consts'
 import { refreshAllBalances } from 'src/home/actions'
+import { checkVerification } from 'src/identity/verification'
 import {
   Actions,
   backupPhraseEmpty,
@@ -76,6 +77,9 @@ export function* importBackupPhraseSaga({ phrase, useEmptyWallet }: ImportBackup
     yield put(refreshAllBalances())
     navigate(Screens.ImportContacts)
     yield put(importBackupPhraseSuccess())
+
+    // Check if the account was verified
+    yield call(checkVerification)
   } catch (error) {
     Logger.error(TAG + '@importBackupPhraseSaga', 'Error importing backup phrase', error)
     yield put(showError(ErrorMessages.IMPORT_BACKUP_FAILED))

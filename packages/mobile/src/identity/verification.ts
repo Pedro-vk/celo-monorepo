@@ -63,6 +63,29 @@ export interface AttestationCode {
   issuer: string
 }
 
+export function* checkVerification() {
+  const attestationsWrapper: AttestationsWrapper = yield call([
+    contractKit.contracts,
+    contractKit.contracts.getAttestations,
+  ])
+
+  const account: string = yield call(getConnectedUnlockedAccount)
+  const e164Number: string = yield select(e164NumberSelector)
+
+  const status: AttestationsStatus = yield call(
+    getAttestationsStatus,
+    attestationsWrapper,
+    account,
+    e164Number
+  )
+
+  if (status.isVerified) {
+    yield put(setVerificationStatus(VerificationStatus.Done))
+    yield put(setNumberVerified(true))
+    return true
+  }
+}
+
 export function* startVerification() {
   yield put(resetVerification())
   yield call(getConnectedAccount)
